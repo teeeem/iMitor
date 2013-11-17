@@ -4,32 +4,63 @@ using namespace ofxCv;
 using namespace cv;
 
 
-const float dyingTime = 2;
+const float dyingTime = 5;
 
 JointTracker::JointTracker()
 {
-
+	colors[0] = ofColor(255,0,0);
+	colors[1] = ofColor(0,255,0);
+	colors[2] = ofColor(0,0,255);
 }
 
-bool JointTracker::addPoint(Fixture * _fixture)
+bool JointTracker::addPoint(int _label)
 {
-	if(joints.size() < 3)
+	if(jointLabels.size() < 3)
 	{
-		joints.push_back(_fixture);
+		jointLabels.push_back(_label);
 		return true;
 	}
 	return false;
 }
 
-void JointTracker::draw()
+void JointTracker::reset()
 {
-	for(int i = 0; i < joints.size(); i++)
+	jointLabels.clear();
+}
+
+void JointTracker::draw(ofxCv::RectTrackerFollower <Fixture> * _trackerReference)
+{
+	vector<Fixture>& followers = _trackerReference->getFollowers();
+	for(int i = 0; i < jointLabels.size(); i++)
 	{
-		ofColor col = ofColor();
-		col.setHex(0xFF, 255);
-		ofSetColor(col); 
-		ofCircle(joints[i]->getCur(), 10);
+		ofVec2f point;
+		if(_trackerReference->existsCurrent(jointLabels[i]))
+		{
+			point = toOf(_trackerReference->getCurrent(jointLabels[i])).getCenter();
+			previous[i] = point;
+		}
+		else
+		{
+			point = previous[i];
+		}
+		//const vector <unsigned int> labels = _trackerReference->getCurrentLabels();
+		//ofVec2f point = ofVec2f(0,0);
+		ofSetColor(colors[i]); 
+		ofCircle(point, 10);
 	}
+}
+
+float JointTracker::getAngle()
+{
+	if(jointLabels.size() < 3) return -1;
+	ofVec2f vecA, vecB;
+	//2-1, 0-1
+	vecA = previous[0]-previous[1];
+	vecA.normalize();
+	vecB = previous[2]-previous[1];
+	vecB.normalize();
+	cout << ofRadToDeg(acos(vecA.dot(vecB))) << endl;
+	return vecA.dot(vecB);
 }
 
 void Fixture::setup(const cv::Rect& track) {
@@ -56,7 +87,7 @@ void Fixture::kill() {
 void Fixture::draw() {
 	ofPushStyle();
 	float size = 16;
-	ofSetColor(255);
+	ofSetColor(0,0,200);
 	if(startedDying) {
 		ofSetColor(ofColor::red);
 		size = ofMap(ofGetElapsedTimef() - startedDying, 0, dyingTime, size, 0, true);
@@ -84,8 +115,11 @@ void testApp::setup(){
 
 	ofSetBackgroundAuto(false);
 	trackingColorMode = TRACK_COLOR_RGB;
-	targetColor = ofColor(253,253,253);
 	targetColor = kinect.getColorPixelsRef().getColor(0, 0);
+	targetColor.r = 254;
+	targetColor.g = 254;
+	targetColor.b = 254;
+	targetColor.a = 0;
 	threshold = 4.4;
 	contourFinder.setMinAreaRadius(2);
 	contourFinder.setMaxAreaRadius(20);
@@ -93,11 +127,13 @@ void testApp::setup(){
 	contourFinder.setTargetColor(targetColor, trackingColorMode);
 	contourFinder.findContours(toCv(kinect.getColorPixelsRef()));
 
-	tracker.setPersistence(15);
-	tracker.setMaximumDistance(50);
+	tracker.setPersistence(60);
+	tracker.setMaximumDistance(100);
+	trackerRef = &tracker;
 
 	picked = NULL;
 	trackedLimb = new JointTracker();
+	doDebugDraw = true;
 }
 
 //--------------------------------------------------------------
@@ -106,6 +142,7 @@ void testApp::update(){
 	kinect.update();
 
 	contourFinder.setThreshold(threshold);
+	//contourFinder.setTargetColor(targetColor, trackingColorMode);
 	contourFinder.findContours(toCv(kinect.getColorPixelsRef()));
 	tracker.track(contourFinder.getBoundingRects());
 }
@@ -115,28 +152,28 @@ void testApp::draw()
 {
 	ofSetColor(255);
 	kinect.draw(0,0);
-	trackedLimb->draw();
+	trackedLimb->draw(trackerRef);
 
-	for(int i =0; i < contourFinder.size();i++)
+	if(doDebugDraw)
 	{
-		ofSetColor(cyanPrint);
-		ofPolyline minAreaRect = toOf(contourFinder.getMinAreaRect(i));
-		minAreaRect.draw();
-	}
-
-	vector<Fixture>& followers = tracker.getFollowers();
-	for(int i = 0; i < followers.size(); i++) {
-		followers[i].draw();
+		for(int i =0; i < contourFinder.size();i++)
+		{
+			ofSetColor(magentaPrint);
+			ofPolyline minAreaRect = toOf(contourFinder.getMinAreaRect(i));
+			minAreaRect.draw();
+		}
 	}
 
 	ofSetColor(0);
-	cout << targetColor << endl;
+	//cout << targetColor << endl;
 	ofSetColor(255,0,0);
 
 	if(picked != NULL)
 	{
 		ofCircle(picked->getCur(), 5);
 	}
+
+	if(!(ofGetFrameNum() % 20))	trackedLimb->getAngle();
 }
 
 //--------------------------------------------------------------
@@ -157,6 +194,11 @@ void testApp::keyPressed(int key){
 		case 'h':
 			gui1->toggleVisible();
 			break;
+		case 'r':
+			trackedLimb->reset();
+			break;
+		case 'd':
+			doDebugDraw = ! doDebugDraw;
 		default:
 			break;
 	}
@@ -201,7 +243,8 @@ void testApp::mousePressed(int x, int y, int button){
 		}
 		if(trackedLimb != NULL)
 		{
-			trackedLimb->addPoint(picked);
+			int newLabel = picked->getLabel();
+			trackedLimb->addPoint(newLabel);
 		}
 	}
 }

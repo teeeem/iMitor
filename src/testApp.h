@@ -7,7 +7,7 @@
 
 
 class Fixture : public ofxCv::RectFollower {
-protected:
+private:
 	ofColor color;
 	ofVec2f cur, smooth;
 	float startedDying;
@@ -27,10 +27,14 @@ class JointTracker
 {
 public:
 	JointTracker();
-	bool addPoint(Fixture *);
-	void draw();
+	bool addPoint(int);
+	void draw(ofxCv::RectTrackerFollower <Fixture> * _trackerRef);
+	void reset();
+	float getAngle();
 private:
-	vector < Fixture * > joints;
+	vector < int > jointLabels;
+	ofColor colors [3];
+	ofVec2f previous[3];
 };
 
 class testApp : public ofBaseApp{
@@ -59,10 +63,13 @@ class testApp : public ofBaseApp{
 		float threshold;
 		ofxCv::TrackingColorMode trackingColorMode;
 		ofColor targetColor;
-		ofxCv::RectTrackerFollower < Fixture > tracker;
+		ofxCv::RectTrackerFollower <Fixture> tracker;
+		ofxCv::RectTrackerFollower <Fixture> * trackerRef;
 
 		ofPoint picker;
 		Fixture * picked;
 
 		JointTracker * trackedLimb;
+
+		bool doDebugDraw;
 };
