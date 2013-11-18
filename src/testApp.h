@@ -59,6 +59,12 @@ class testApp : public ofBaseApp{
 		ofxUICanvas *gui1;
 		void setGUI1();
 
+		ofstream logFile;
+		int fileCounter;
+		ofxUILabel *labelNumber;
+		float startTime;
+		ofxUIMovingGraph *graph; 
+
 		ofxCv::ContourFinder contourFinder;
 		float threshold;
 		ofxCv::TrackingColorMode trackingColorMode;
@@ -72,4 +78,6 @@ class testApp : public ofBaseApp{
 		JointTracker * trackedLimb;
 
 		bool doDebugDraw;
+		ofFbo directions;
+		ofTrueTypeFont font;
 };

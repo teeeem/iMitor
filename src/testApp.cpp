@@ -59,8 +59,8 @@ float JointTracker::getAngle()
 	vecA.normalize();
 	vecB = previous[2]-previous[1];
 	vecB.normalize();
-	cout << ofRadToDeg(acos(vecA.dot(vecB))) << endl;
-	return vecA.dot(vecB);
+	//cout << ofRadToDeg(acos(vecA.dot(vecB))) << endl;
+	return ofRadToDeg(acos(vecA.dot(vecB)));
 }
 
 void Fixture::setup(const cv::Rect& track) {
@@ -111,8 +111,6 @@ void testApp::setup(){
 	kinect.initColorStream(640, 480, true);
 	kinect.start();
 
-	setGUI1(); 
-
 	ofSetBackgroundAuto(false);
 	trackingColorMode = TRACK_COLOR_RGB;
 	targetColor = kinect.getColorPixelsRef().getColor(0, 0);
@@ -134,6 +132,24 @@ void testApp::setup(){
 	picked = NULL;
 	trackedLimb = new JointTracker();
 	doDebugDraw = true;
+
+	setGUI1();
+	fileCounter = 0;
+	font.loadFont("GUI/NewMedia Fett.ttf", 24, true, false, true);
+	directions.allocate(640, 240, GL_RGBA);
+    directions.begin();
+        ofClear(135,135,135,0);
+		ofPushMatrix();
+			ofTranslate(0,35);
+			ofSetColor(240);
+			font.drawString("Controls:", 28, 28);
+			font.drawString("d: toggle debug draw mode", 28, 56);
+			font.drawString("r: reset identified joints", 28, 84);
+			font.drawString("lmb: select joint", 28, 112);
+			font.drawString("order: shoulder, elbow, wrist", 56, 140);
+			font.drawString("hip, knee, ankle", 150, 168);
+		ofPopMatrix();
+    directions.end();
 }
 
 //--------------------------------------------------------------
@@ -142,9 +158,18 @@ void testApp::update(){
 	kinect.update();
 
 	contourFinder.setThreshold(threshold);
-	//contourFinder.setTargetColor(targetColor, trackingColorMode);
+	// contourFinder.setTargetColor(targetColor, trackingColorMode);
 	contourFinder.findContours(toCv(kinect.getColorPixelsRef()));
 	tracker.track(contourFinder.getBoundingRects());
+	if(!(ofGetFrameNum() % 5))
+	{
+		float angle = trackedLimb->getAngle();
+		graph->addPoint(angle);
+		if(logFile.is_open())
+		{
+			logFile << ofGetElapsedTimef() - startTime << ", " << angle << endl;
+		}
+	}
 }
 
 //--------------------------------------------------------------
@@ -152,15 +177,20 @@ void testApp::draw()
 {
 	ofSetColor(255);
 	kinect.draw(0,0);
+	directions.draw(0,490);
 	trackedLimb->draw(trackerRef);
+	ofSetColor(255,0,0);
 
 	if(doDebugDraw)
 	{
 		for(int i =0; i < contourFinder.size();i++)
 		{
-			ofSetColor(magentaPrint);
-			ofPolyline minAreaRect = toOf(contourFinder.getMinAreaRect(i));
-			minAreaRect.draw();
+			ofPushStyle();
+				ofSetColor(magentaPrint);
+				ofSetLineWidth(3);
+				ofPolyline minAreaRect = toOf(contourFinder.getMinAreaRect(i));
+				minAreaRect.draw();
+			ofPopStyle();
 		}
 	}
 
@@ -170,10 +200,8 @@ void testApp::draw()
 
 	if(picked != NULL)
 	{
-		ofCircle(picked->getCur(), 5);
+		//ofCircle(picked->getCur(), 5);
 	}
-
-	if(!(ofGetFrameNum() % 20))	trackedLimb->getAngle();
 }
 
 //--------------------------------------------------------------
@@ -256,7 +284,7 @@ void testApp::mouseReleased(int x, int y, int button){
 
 //--------------------------------------------------------------
 void testApp::windowResized(int w, int h){
-
+	//cout << w << ", " << h<< endl;
 }
 
 //--------------------------------------------------------------
@@ -293,6 +321,22 @@ void testApp::guiEvent(ofxUIEventArgs &e)
 		contourFinder.setMaxAreaRadius(slider->getScaledValue());
 		return;
 	}
+	if(name == "Write to File")
+	{
+		ofxUIToggle *toggle = (ofxUIToggle *) e.widget;
+		if(toggle->getValue())
+		{
+			fileCounter++;
+			labelNumber->setLabel("File Number: " + ofToString(fileCounter));
+			logFile.open("iMitor_file_" + ofToString(fileCounter) + ".csv");
+			startTime = ofGetElapsedTimef();
+		}
+		else
+		{
+			logFile.close();
+		}
+		return;
+	}
 }
 
 void testApp::setGUI1()
@@ -302,9 +346,8 @@ void testApp::setGUI1()
     float length = 255-xInit; 
 	
     vector<string> names; 
-	names.push_back("RAD1");
-	names.push_back("RAD2");
-	names.push_back("RAD3");	
+	names.push_back("Arm");
+	names.push_back("Leg");	
 	
 	gui1 = new ofxUICanvas(640, 0, 384, ofGetHeight()); 
 	gui1->addWidgetDown(new ofxUILabel("iMitor Mobility Monitor", OFX_UI_FONT_LARGE)); 
@@ -316,33 +359,22 @@ void testApp::setGUI1()
 	gui1->addSlider("MIN_SIZE", 0.0, 20.0, 2, length-xInit,dim);
 	gui1->addSlider("MAX_SIZE", 0.0, 100.0, 20, length-xInit,dim);
 
-    gui1->addSpacer(length-xInit, 2); 
-    gui1->addWidgetDown(new ofxUILabel("NOT_ALLOCATED", OFX_UI_FONT_MEDIUM)); 
-	gui1->addSlider("0", 0.0, 255.0, 150, dim, 160);
-	gui1->setWidgetPosition(OFX_UI_WIDGET_POSITION_RIGHT);
-	gui1->addSlider("1", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("2", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("3", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("4", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("5", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("6", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("7", 0.0, 255.0, 150, dim, 160);
-	gui1->addSlider("8", 0.0, 255.0, 150, dim, 160);
 	gui1->setWidgetPosition(OFX_UI_WIDGET_POSITION_DOWN);
     
     gui1->addSpacer(length-xInit, 2);
 	gui1->addRadio("RADIO HORIZONTAL", names, OFX_UI_ORIENTATION_HORIZONTAL, dim, dim); 
-	gui1->addRadio("RADIO VERTICAL", names, OFX_UI_ORIENTATION_VERTICAL, dim, dim); 
 
-    gui1->addSpacer(length-xInit, 2);
-	gui1->addWidgetDown(new ofxUILabel("BUTTONS", OFX_UI_FONT_MEDIUM)); 
-	gui1->addButton("DRAW GRID", false, dim, dim);
-	gui1->addWidgetDown(new ofxUILabel("TOGGLES", OFX_UI_FONT_MEDIUM)); 
-	gui1->addToggle( "D_GRID", false, dim, dim);
+    gui1->addSpacer(length-xInit, 2); 
+	labelNumber = gui1->addLabel("File Number: 0", OFX_UI_FONT_MEDIUM);
+	gui1->addToggle( "Write to File", false, dim, dim);
     
+	vector <float> buffer;
+	for(int i = 0; i < 256; i++)
+	{
+		buffer.push_back(0.0);
+	}
     gui1->addSpacer(length-xInit, 2);
-    gui1->addWidgetDown(new ofxUILabel("RANGE SLIDER", OFX_UI_FONT_MEDIUM)); 
-	gui1->addRangeSlider("RSLIDER", 0.0, 255.0, 50.0, 100.0, length-xInit,dim);
+    graph = (ofxUIMovingGraph *) gui1->addWidgetDown(new ofxUIMovingGraph(length-xInit, 120, buffer, 256, 0, 180, "REAL_TIME_GRAPH"));
 
 	ofAddListener(gui1->newGUIEvent,this,&testApp::guiEvent);
 }
